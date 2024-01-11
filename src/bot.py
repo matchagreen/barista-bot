@@ -11,7 +11,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('''`Command format is incorrect. Send "/help {command}" for
- details on how to run a command. Bip bop.
+ details on how to run a command. Bip bop
 `''')
         return
     if isinstance(error, commands.CommandNotFound):
@@ -34,6 +34,7 @@ async def play(ctx, url):
 
         audio_stream = yt.streams.filter(only_audio=True).first()
         source = discord.FFmpegPCMAudio(audio_stream.url)
+        source.read()   # This prevents audio from speeding at the beginning
         vc.play(source, after=lambda error: print('Player error: ${e}') if error else None)
 
         while vc.is_playing():
@@ -43,3 +44,8 @@ async def play(ctx, url):
     except Exception as e:
         await vc.disconnect()
         raise
+
+@bot.command(help='Stops bot from playing audio')
+async def stop(ctx):
+    ctx.voice_client.stop()
+    await ctx.send('`Stopping audio. Bip bop`')
