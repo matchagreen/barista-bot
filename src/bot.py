@@ -27,7 +27,12 @@ async def play(ctx, url):
         await ctx.send('`Please connect to the channel before requesting music to play. Bip bop`')
         return
 
-    vc = await ctx.author.voice.channel.connect()
+    if ctx.voice_client:
+        # Stop if already playing
+        vc = ctx.voice_client
+        vc.stop()
+    else:
+        vc = await ctx.author.voice.channel.connect()
 
     try:
         yt = YouTube(url)
