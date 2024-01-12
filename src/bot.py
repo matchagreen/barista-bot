@@ -56,6 +56,7 @@ async def play(ctx: commands.Context, url: str):
     # If already playing, replace
     vc = ctx.voice_client
     if vc:
+        vc.stop()
         vc.play(source)
         return
 
@@ -80,27 +81,36 @@ async def pause(ctx: commands.Context):
 
 @bot.command(help='')
 async def play_next(ctx: commands.Context, url: str):
-    playlist: deque = playlists[ctx.guild.id]
-
     try:
         source = get_url_audio_source(url)
     except Exception as e:
         print(f'Could not get source from url={url}: {e}')
         raise
 
-    playlist.appendleft(source)
+    playlist: deque = playlists.get(ctx.guild.id, None)
+
+    if playlist:
+        playlist.appendleft(source)
+        return
+
+    playlist = deque([source])
+    asyncio.ensure_future(execute_player_worker(ctx, playlist))
 
 @bot.command(help='')
 async def play_last(ctx: commands.Context, url: str):
-    playlist: deque = playlists[ctx.guild.id]
-
     try:
         source = get_url_audio_source(url)
     except Exception as e:
         print(f'Could not get source from url={url}: {e}')
         raise
 
-    playlist.append(source)
+    playlist: deque = playlists.get(ctx.guild.id, None)
+    if playlist:
+        playlist.append(source)
+        return
+
+    playlist = deque([source])
+    asyncio.ensure_future(execute_player_worker(ctx, playlist))
 
 def get_url_audio_source(url: str):
     yt = YouTube(url)
