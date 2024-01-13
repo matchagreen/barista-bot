@@ -12,6 +12,10 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 
 playlists: dict[str, deque[Song]] = {}
 
+def on_song_end(error: Exception, event: asyncio.Event):
+    if error: print(f'Finished song with error: {error}')
+    event.set()
+
 async def execute_player_worker(ctx: commands.Context, playlist: deque):
     global playlists
     playlists[ctx.guild.id] = playlist
@@ -23,7 +27,7 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
         song = playlist.popleft()
         song.source.read()  # This prevents audio from speeding at the beginning
 
-        vc.play(song.source, after = lambda e: next_song_event.set())
+        vc.play(song.source, after=lambda error: on_song_end(error, next_song_event))
         await next_song_event.wait()
         next_song_event.clear()
 
@@ -45,7 +49,7 @@ async def on_command_error(ctx: commands.Context, error: Exception):
     await ctx.send('`Something broke 🤖💥 bop bip`')
     raise error
 
-@bot.command(help='Plays the audio from a youtube link')
+@bot.command(help='Resumes or starts an audio player on the channel in which the user is located.')
 async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'):
     print(f'Play request: url={url}, add_order={add_order}')
 
@@ -107,4 +111,12 @@ async def stop(ctx: commands.Context):
         return
 
     playlists[ctx.guild.id].clear()
+    vc.stop()
+
+@bot.command(help='Skips the current song')
+async def skip(ctx: commands.Context):
+    vc = ctx.voice_client
+    if not vc:
+        return
+
     vc.stop()
