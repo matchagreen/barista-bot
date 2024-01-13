@@ -9,7 +9,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-playlists = {}
+playlists: dict[str, deque] = {}
 
 async def execute_player_worker(ctx: commands.Context, playlist: deque):
     global playlists
@@ -65,20 +65,18 @@ async def play(ctx: commands.Context, url: str, add_order: str = 'now'):
     # Replace
     vc = ctx.voice_client
     if vc and add_order == 'now':   # If already playing, replace
-        print('HERE 1')
-        vc.stop()
-        print('HERE 2')
+        vc.pause()
         vc.play(source)
-        print('HERE 3')
         return
 
-    # Add next/last
-    playlist: deque = playlists.get(ctx.guild.id, None)
-    if playlist:    # If playlist exists, add song
+    # If bot is playing, add next/last
+    if ctx.guild.id in playlists:
+        playlist = playlists[ctx.guild.id]
         if add_order == 'next':
             playlist.appendleft(source)
         else:
             playlist.append(source)
+        return
 
     # Starting worker
     if not ctx.author.voice:    # Author must be in a voice channel when starting player
