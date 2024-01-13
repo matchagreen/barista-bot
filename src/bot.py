@@ -1,3 +1,4 @@
+from typing import Optional
 from .utilities.stream import get_url_audio_source
 from collections import deque
 import asyncio
@@ -25,7 +26,7 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
             await asyncio.sleep(1)  # TODO: Figure out how to do this without sleep
 
     # Done with playlist
-    playlists.pop(ctx.guild.id)
+    del playlists[ctx.guild.id]
     await vc.disconnect()
 
 @bot.event
@@ -43,16 +44,20 @@ async def on_command_error(ctx: commands.Context, error: Exception):
     raise error
 
 @bot.command(help='Plays the audio from a youtube link')
-async def play(ctx: commands.Context, url: str, add_order: str = 'now'):
+async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'):
     print(f'Play request: url={url}, add_order={add_order}')
 
-    # TODO: Resume playing
+    # Resume playing
+    vc = ctx.voice_client
     if url is None:
-        return
+        if not vc:
+            return await ctx.send(f'`Cannot resume playing. I am not currently in a voice channel. Bip bop`')
+
+        return vc.resume()
 
     # Invalid add_order
     if add_order not in ['now', 'next', 'last']:
-        await ctx.send(f'`"{add_order}" must be one of: "now", "next", "last", or simply omit`')
+        await ctx.send(f'`"{add_order}" must be one of: "now", "next", "last", or simply omit. Bip bop`')
         return
 
     # Get stream
@@ -62,9 +67,8 @@ async def play(ctx: commands.Context, url: str, add_order: str = 'now'):
         print(f'Could not get source from url={url}: {e}')
         raise
 
-    # Replace
-    vc = ctx.voice_client
-    if vc and add_order == 'now':   # If already playing, replace
+    # Replace current song
+    if vc and add_order == 'now':
         vc.pause()
         vc.play(source)
         return
@@ -93,3 +97,13 @@ async def pause(ctx: commands.Context):
         return
 
     vc.pause()
+
+@bot.command()
+async def stop(ctx: commands.Context):
+    vc = ctx.voice_client
+    if not vc:
+        return
+
+    vc.stop()
+    del playlists[ctx.guild.id]
+
