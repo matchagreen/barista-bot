@@ -1,11 +1,10 @@
 from pytube import YouTube
 import discord
 
+class Song:
+    def __init__(self, url):
+        yt = YouTube(url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
 
-def get_url_audio_source(url: str):
-    yt = YouTube(url)
-
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    source = discord.FFmpegPCMAudio(audio_stream.url)
-
-    return source
+        self.title = yt.title
+        self.source = discord.FFmpegPCMAudio(audio_stream.url)

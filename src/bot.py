@@ -1,5 +1,5 @@
 from typing import Optional
-from .utilities.stream import get_url_audio_source
+from .utilities.stream import Song
 from collections import deque
 import asyncio
 import discord
@@ -10,7 +10,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-playlists: dict[str, deque] = {}
+playlists: dict[str, deque[Song]] = {}
 
 async def execute_player_worker(ctx: commands.Context, playlist: deque):
     global playlists
@@ -18,12 +18,12 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
     vc = await ctx.author.voice.channel.connect()
 
     while playlist:
-        source = playlist.popleft()
+        source = playlist.popleft().source
         source.read()   # This prevents audio from speeding at the beginning
 
         vc.play(source)
         while vc.is_paused() or vc.is_playing():
-            await asyncio.sleep(1)  # TODO: Figure out how to do this without sleep
+            await asyncio.sleep(1)  # TODO: Figure out how to do this without sleep, probably with an asyncio event.
 
     # Done with playlist
     del playlists[ctx.guild.id]
@@ -62,7 +62,7 @@ async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'
 
     # Get stream
     try:
-        source = get_url_audio_source(url)
+        song = Song(url)
     except Exception as e:
         print(f'Could not get source from url={url}: {e}')
         raise
@@ -70,24 +70,24 @@ async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'
     # Replace current song
     if vc and add_order == 'now':
         vc.pause()
-        vc.play(source)
-        return
+        return vc.play(song.source)
 
     # If bot is playing, add next/last
     if ctx.guild.id in playlists:
         playlist = playlists[ctx.guild.id]
         if add_order == 'next':
-            playlist.appendleft(source)
+            playlist.appendleft(song)
         else:
-            playlist.append(source)
-        return
+            playlist.append(song)
+
+        titles_list = ''.join([f'- {song.title}\n' for song in playlist])
+        return await ctx.send(f'`Current queue:\n{titles_list}`')
 
     # Starting worker
     if not ctx.author.voice:    # Author must be in a voice channel when starting player
-        await ctx.send('`Please connect to the channel before requesting music to play. Bip bop`')
-        return
+        return await ctx.send('`Please connect to the channel before requesting music to play. Bip bop`')
 
-    playlist = deque([source])
+    playlist = deque([song])
     asyncio.ensure_future(execute_player_worker(ctx, playlist))
 
 @bot.command(help='Bot pauses playing audio')
