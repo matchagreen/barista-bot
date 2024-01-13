@@ -1,5 +1,5 @@
 from typing import Optional
-from .utilities.stream import Song
+from .utilities.song import Song
 from collections import deque
 import asyncio
 import discord
@@ -15,17 +15,19 @@ playlists: dict[str, deque[Song]] = {}
 async def execute_player_worker(ctx: commands.Context, playlist: deque):
     global playlists
     playlists[ctx.guild.id] = playlist
+
+    next_song_event = asyncio.Event()
     vc = await ctx.author.voice.channel.connect()
 
     while playlist:
-        source = playlist.popleft().source
-        source.read()   # This prevents audio from speeding at the beginning
+        song = playlist.popleft()
+        song.source.read()  # This prevents audio from speeding at the beginning
 
-        vc.play(source)
-        while vc.is_paused() or vc.is_playing():
-            await asyncio.sleep(1)  # TODO: Figure out how to do this without sleep, probably with an asyncio event.
+        vc.play(song.source, after = lambda e: next_song_event.set())
+        await next_song_event.wait()
+        next_song_event.clear()
 
-    # Done with playlist
+    # Clean up
     del playlists[ctx.guild.id]
     await vc.disconnect()
 
@@ -69,8 +71,8 @@ async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'
 
     # Replace current song
     if vc and add_order == 'now':
-        vc.pause()
-        return vc.play(song.source)
+        playlists[ctx.guild.id].appendleft(song)
+        return vc.stop()
 
     # If bot is playing, add next/last
     if ctx.guild.id in playlists:
@@ -90,7 +92,7 @@ async def play(ctx: commands.Context, url: Optional[str], add_order: str = 'now'
     playlist = deque([song])
     asyncio.ensure_future(execute_player_worker(ctx, playlist))
 
-@bot.command(help='Bot pauses playing audio')
+@bot.command(help='Pause audio')
 async def pause(ctx: commands.Context):
     vc = ctx.voice_client
     if not vc:
@@ -98,12 +100,11 @@ async def pause(ctx: commands.Context):
 
     vc.pause()
 
-@bot.command()
+@bot.command(help='Stop player')
 async def stop(ctx: commands.Context):
     vc = ctx.voice_client
     if not vc:
         return
 
+    playlists[ctx.guild.id].clear()
     vc.stop()
-    del playlists[ctx.guild.id]
-
