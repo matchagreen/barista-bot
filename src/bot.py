@@ -4,6 +4,7 @@ from pytube import YouTube
 import discord
 from discord.ext import commands
 
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='/', intents=intents)
@@ -17,7 +18,10 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
 
     # Keep running as long as playlist has songs
     while True:
-        vc.play(playlist.popleft(), after=lambda e: print(f'Finished playing song.{f" {e}" if e else ""}'))
+        source = playlist.popleft()
+        source.read()   # This prevents audio from speeding at the beginning
+
+        vc.play(source, after=lambda e: print(f'Finished playing song.{f" {e}" if e else ""}'))
 
         while vc.is_paused() or vc.is_playing():
             await asyncio.sleep(1)
@@ -27,8 +31,29 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
 
     playlists.pop(ctx.guild.id)
 
+
+def playlist_add(ctx: commands.Context, add_order: str, url: str):
+    try:
+        source = get_url_audio_source(url)
+    except Exception as e:
+        print(f'Could not get source from url={url}: {e}')
+        raise
+
+    playlist: deque = playlists.get(ctx.guild.id, None)
+
+    # Start player worker
+    if playlist is None:
+        playlist = deque([source])
+        asyncio.ensure_future(execute_player_worker(ctx, playlist))
+        return
+
+    if add_order == 'next':
+        playlist.appendleft(source)
+    else:
+        playlist.append(source)
+
 @bot.event
-async def on_command_error(ctx: commands.Context, error):
+async def on_command_error(ctx: commands.Context, error: Exception):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('''`Command format is incorrect. Send "/help {command}" for
  details on how to run a command. Bip bop
@@ -63,14 +88,6 @@ async def play(ctx: commands.Context, url: str):
     playlist = deque([source])
     asyncio.ensure_future(execute_player_worker(ctx, playlist))
 
-@bot.command(help='Stops bot from playing audio')
-async def stop(ctx: commands.Context):
-    vc = ctx.voice_client
-    if not vc:
-        return
-
-    vc.stop()
-
 @bot.command(help='Bot pauses playing audio')
 async def pause(ctx: commands.Context):
     vc = ctx.voice_client
@@ -80,43 +97,16 @@ async def pause(ctx: commands.Context):
     vc.pause()
 
 @bot.command(help='')
-async def play_next(ctx: commands.Context, url: str):
-    try:
-        source = get_url_audio_source(url)
-    except Exception as e:
-        print(f'Could not get source from url={url}: {e}')
-        raise
+async def playlist(ctx: commands.Context, add_order: str, url: str):
+    if add_order not in ['next', 'last']:
+        raise Exception('Invalid')
 
-    playlist: deque = playlists.get(ctx.guild.id, None)
-
-    if playlist:
-        playlist.appendleft(source)
-        return
-
-    playlist = deque([source])
-    asyncio.ensure_future(execute_player_worker(ctx, playlist))
-
-@bot.command(help='')
-async def play_last(ctx: commands.Context, url: str):
-    try:
-        source = get_url_audio_source(url)
-    except Exception as e:
-        print(f'Could not get source from url={url}: {e}')
-        raise
-
-    playlist: deque = playlists.get(ctx.guild.id, None)
-    if playlist:
-        playlist.append(source)
-        return
-
-    playlist = deque([source])
-    asyncio.ensure_future(execute_player_worker(ctx, playlist))
+    playlist_add(ctx, add_order, url)
 
 def get_url_audio_source(url: str):
     yt = YouTube(url)
 
     audio_stream = yt.streams.filter(only_audio=True).first()
     source = discord.FFmpegPCMAudio(audio_stream.url)
-    source.read()   # This prevents audio from speeding at the beginning
 
     return source
