@@ -16,7 +16,7 @@ def on_song_end(error: Exception, event: asyncio.Event):
     print(f'Finished song{ f" with error: {error}" if error else ""}')
     event.set()
 
-async def execute_player_worker(ctx: commands.Context, playlist: deque):
+async def execute_player_worker(ctx: commands.Context, playlist: deque[Song]):
     global playlists
     playlists[ctx.guild.id] = playlist
 
@@ -25,9 +25,8 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
 
     while playlist:
         song = playlist.popleft()
-        song.source.read()  # This prevents audio from speeding at the beginning
 
-        vc.play(song.source, after=lambda error: on_song_end(error, next_song_event))
+        vc.play(song.get_stream(), after=lambda error: on_song_end(error, next_song_event))
         await next_song_event.wait()
         next_song_event.clear()
 

@@ -3,8 +3,14 @@ import discord
 
 class Song:
     def __init__(self, url):
-        yt = YouTube(url)
-        audio_stream = yt.streams.filter(only_audio=True).first()
+        self._url = url
 
+        yt = YouTube(url)
         self.title = yt.title
-        self.source = discord.FFmpegPCMAudio(audio_stream.url)
+
+    def get_stream(self):
+        yt = YouTube(self._url)
+        stream = yt.streams.filter(only_audio=True).first()
+        discord_stream = discord.FFmpegPCMAudio(stream.url)
+        discord_stream.read()
+        return discord_stream
