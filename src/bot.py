@@ -1,6 +1,6 @@
+from .utilities.stream import get_url_audio_source
 from collections import deque
 import asyncio
-from pytube import YouTube
 import discord
 from discord.ext import commands
 
@@ -16,41 +16,17 @@ async def execute_player_worker(ctx: commands.Context, playlist: deque):
     playlists[ctx.guild.id] = playlist
     vc = await ctx.author.voice.channel.connect()
 
-    # Keep running as long as playlist has songs
-    while True:
+    while playlist:
         source = playlist.popleft()
         source.read()   # This prevents audio from speeding at the beginning
 
-        vc.play(source, after=lambda e: print(f'Finished playing song.{f" {e}" if e else ""}'))
-
+        vc.play(source)
         while vc.is_paused() or vc.is_playing():
-            await asyncio.sleep(1)
+            await asyncio.sleep(1)  # TODO: Figure out how to do this without sleep
 
-        if not playlist:
-            break
-
+    # Done with playlist
     playlists.pop(ctx.guild.id)
-
-
-def playlist_add(ctx: commands.Context, add_order: str, url: str):
-    try:
-        source = get_url_audio_source(url)
-    except Exception as e:
-        print(f'Could not get source from url={url}: {e}')
-        raise
-
-    playlist: deque = playlists.get(ctx.guild.id, None)
-
-    # Start player worker
-    if playlist is None:
-        playlist = deque([source])
-        asyncio.ensure_future(execute_player_worker(ctx, playlist))
-        return
-
-    if add_order == 'next':
-        playlist.appendleft(source)
-    else:
-        playlist.append(source)
+    await vc.disconnect()
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: Exception):
@@ -67,22 +43,46 @@ async def on_command_error(ctx: commands.Context, error: Exception):
     raise error
 
 @bot.command(help='Plays the audio from a youtube link')
-async def play(ctx: commands.Context, url: str):
-    if not ctx.author.voice:
-        await ctx.send('`Please connect to the channel before requesting music to play. Bip bop`')
+async def play(ctx: commands.Context, url: str, add_order: str = 'now'):
+    print(f'Play request: url={url}, add_order={add_order}')
+
+    # TODO: Resume playing
+    if url is None:
         return
 
+    # Invalid add_order
+    if add_order not in ['now', 'next', 'last']:
+        await ctx.send(f'`"{add_order}" must be one of: "now", "next", "last", or simply omit`')
+        return
+
+    # Get stream
     try:
         source = get_url_audio_source(url)
     except Exception as e:
         print(f'Could not get source from url={url}: {e}')
         raise
 
-    # If already playing, replace
+    # Replace
     vc = ctx.voice_client
-    if vc:
+    if vc and add_order == 'now':   # If already playing, replace
+        print('HERE 1')
         vc.stop()
+        print('HERE 2')
         vc.play(source)
+        print('HERE 3')
+        return
+
+    # Add next/last
+    playlist: deque = playlists.get(ctx.guild.id, None)
+    if playlist:    # If playlist exists, add song
+        if add_order == 'next':
+            playlist.appendleft(source)
+        else:
+            playlist.append(source)
+
+    # Starting worker
+    if not ctx.author.voice:    # Author must be in a voice channel when starting player
+        await ctx.send('`Please connect to the channel before requesting music to play. Bip bop`')
         return
 
     playlist = deque([source])
@@ -95,18 +95,3 @@ async def pause(ctx: commands.Context):
         return
 
     vc.pause()
-
-@bot.command(help='')
-async def playlist(ctx: commands.Context, add_order: str, url: str):
-    if add_order not in ['next', 'last']:
-        raise Exception('Invalid')
-
-    playlist_add(ctx, add_order, url)
-
-def get_url_audio_source(url: str):
-    yt = YouTube(url)
-
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    source = discord.FFmpegPCMAudio(audio_stream.url)
-
-    return source
