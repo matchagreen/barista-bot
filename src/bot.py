@@ -13,7 +13,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 playlists: dict[str, deque[Song]] = {}
 
 def on_song_end(error: Exception, event: asyncio.Event):
-    if error: print(f'Finished song with error: {error}')
+    print(f'Finished song{ f" with error: {error}" if error else ""}')
     event.set()
 
 async def execute_player_worker(ctx: commands.Context, playlist: deque):
