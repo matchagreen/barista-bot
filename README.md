@@ -1,5 +1,7 @@
 # Barista Bot
 
+<a href="url"><img src="images/iced-matcha-latte.jpg" height="auto" width="200" style="border-radius:50%"></a>
+
 Personal discord bot developed in Python. Mostly just a youtube player for now. The commands are listed below:
 
 ### Play
@@ -46,4 +48,3 @@ Stops audio and clears the current paylist:
     /stop
 
 
-![alt text](images/iced-matcha-latte.jpg)
